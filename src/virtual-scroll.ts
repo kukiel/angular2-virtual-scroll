@@ -1,4 +1,5 @@
 import {
+  AfterViewChecked,
   Component,
   ContentChild,
   ElementRef,
@@ -52,7 +53,7 @@ export interface ChangeEvent {
     }
   `]
 })
-export class VirtualScrollComponent implements OnInit, OnChanges, OnDestroy {
+export class VirtualScrollComponent implements OnInit, OnChanges, OnDestroy, AfterViewChecked {
 
   @Input()
   items: any[] = [];
@@ -72,6 +73,9 @@ export class VirtualScrollComponent implements OnInit, OnChanges, OnDestroy {
   @Input()
   bufferAmount: number = 0;
 
+  @Input()
+  autoScroll: boolean = false;
+
   private refreshHandler = () => {
     this.refresh();
   };
@@ -88,6 +92,10 @@ export class VirtualScrollComponent implements OnInit, OnChanges, OnDestroy {
 
   get parentScroll(): Element | Window {
     return this._parentScroll;
+  }
+
+  get scrollElement(): Element {
+    return this.parentScroll instanceof Window ? document.body : this.parentScroll || this.element.nativeElement;
   }
 
   @Output()
@@ -115,6 +123,7 @@ export class VirtualScrollComponent implements OnInit, OnChanges, OnDestroy {
   previousEnd: number;
   startupLoop: boolean = true;
   window = window;
+  doScrollBottom: boolean = false;
 
   constructor(private element: ElementRef) { }
 
@@ -139,7 +148,18 @@ export class VirtualScrollComponent implements OnInit, OnChanges, OnDestroy {
     if ((changes as any).items != undefined && items.previousValue == undefined || (items.previousValue != undefined && items.previousValue.length === 0)) {
       this.startupLoop = true;
     }
+    const autoScroll = (changes as any).autoScroll || {};
+    if (this.autoScroll && (items.currentValue || !autoScroll.previousValue)) {
+      this.doScrollBottom = true;
+    }
     this.refresh();
+  }
+
+  ngAfterViewChecked() {
+    if (this.doScrollBottom) {
+      this.scrollElement.scrollTop = this.scrollElement.scrollHeight;
+      this.doScrollBottom = false;
+    }
   }
 
   refresh() {
@@ -147,13 +167,12 @@ export class VirtualScrollComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   scrollInto(item: any) {
-    let el: Element = this.parentScroll instanceof Window ? document.body : this.parentScroll || this.element.nativeElement;
     let offsetTop = this.getElementsOffset();
     let index: number = (this.items || []).indexOf(item);
     if (index < 0 || index >= (this.items || []).length) return;
 
     let d = this.calculateDimensions();
-    el.scrollTop = (Math.floor(index / d.itemsPerRow) * d.childHeight)
+    this.scrollElement.scrollTop = (Math.floor(index / d.itemsPerRow) * d.childHeight)
       - (d.childHeight * Math.min(index, this.bufferAmount));
     this.refresh();
   }
@@ -199,11 +218,10 @@ export class VirtualScrollComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private calculateDimensions() {
-    let el: Element = this.parentScroll instanceof Window ? document.body : this.parentScroll || this.element.nativeElement;
     let items = this.items || [];
     let itemCount = items.length;
-    let viewWidth = el.clientWidth - this.scrollbarWidth;
-    let viewHeight = el.clientHeight - this.scrollbarHeight;
+    let viewWidth = this.scrollElement.clientWidth - this.scrollbarWidth;
+    let viewHeight = this.scrollElement.clientHeight - this.scrollbarHeight;
 
     let contentDimensions;
     if (this.childWidth == undefined || this.childHeight == undefined) {
@@ -224,7 +242,7 @@ export class VirtualScrollComponent implements OnInit, OnChanges, OnDestroy {
     let itemsPerCol = Math.max(1, Math.floor(viewHeight / childHeight));
     let elScrollTop = this.parentScroll instanceof Window
       ? (window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0)
-      : el.scrollTop;
+      : this.scrollElement.scrollTop;
     let scrollTop = Math.max(0, elScrollTop);
     if (itemsPerCol === 1 && Math.floor(scrollTop / this.scrollHeight * itemCount) + itemsPerRowByCalc >= itemCount) {
       itemsPerRow = itemsPerRowByCalc;
@@ -243,14 +261,12 @@ export class VirtualScrollComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private calculateItems() {
-    let el = this.parentScroll instanceof Window ? document.body : this.parentScroll || this.element.nativeElement;
-
     let d = this.calculateDimensions();
     let items = this.items || [];
     let offsetTop = this.getElementsOffset();
     let elScrollTop = this.parentScroll instanceof Window
       ? (window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0)
-      : el.scrollTop;
+      : this.scrollElement.scrollTop;
     this.scrollHeight = d.childHeight * d.itemCount / d.itemsPerRow;
     if (elScrollTop > this.scrollHeight) {
       elScrollTop = this.scrollHeight + offsetTop;
@@ -268,7 +284,7 @@ export class VirtualScrollComponent implements OnInit, OnChanges, OnDestroy {
     let maxStart = Math.max(0, maxStartEnd - d.itemsPerCol * d.itemsPerRow - d.itemsPerRow);
     let start = Math.min(maxStart, Math.floor(indexByScrollTop) * d.itemsPerRow);
 
-    this.topPadding = d.childHeight * Math.ceil(start / d.itemsPerRow) - (d.childHeight * Math.min(start, this.bufferAmount));;
+    this.topPadding = d.childHeight * Math.ceil(start / d.itemsPerRow) - (d.childHeight * Math.min(start, this.bufferAmount));
 
     start = !isNaN(start) ? start : -1;
     end = !isNaN(end) ? end : -1;

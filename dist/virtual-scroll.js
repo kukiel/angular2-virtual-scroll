@@ -1,4 +1,5 @@
 "use strict";
+/* tslint:disable */
 Object.defineProperty(exports, "__esModule", { value: true });
 var core_1 = require("@angular/core");
 var VirtualScrollComponent = (function () {
@@ -7,6 +8,7 @@ var VirtualScrollComponent = (function () {
         this.element = element;
         this.items = [];
         this.bufferAmount = 0;
+        this.autoScroll = false;
         this.refreshHandler = function () {
             _this.refresh();
         };
@@ -16,6 +18,7 @@ var VirtualScrollComponent = (function () {
         this.end = new core_1.EventEmitter();
         this.startupLoop = true;
         this.window = window;
+        this.doScrollBottom = false;
     }
     Object.defineProperty(VirtualScrollComponent.prototype, "parentScroll", {
         get: function () {
@@ -28,6 +31,13 @@ var VirtualScrollComponent = (function () {
             this.removeParentEventHandlers(this._parentScroll);
             this._parentScroll = element;
             this.addParentEventHandlers(this._parentScroll);
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(VirtualScrollComponent.prototype, "scrollElement", {
+        get: function () {
+            return this.parentScroll instanceof Window ? document.body : this.parentScroll || this.element.nativeElement;
         },
         enumerable: true,
         configurable: true
@@ -49,20 +59,29 @@ var VirtualScrollComponent = (function () {
         if (changes.items != undefined && items.previousValue == undefined || (items.previousValue != undefined && items.previousValue.length === 0)) {
             this.startupLoop = true;
         }
+        var autoScroll = changes.autoScroll || {};
+        if (this.autoScroll && (items.currentValue || !autoScroll.previousValue)) {
+            this.doScrollBottom = true;
+        }
         this.refresh();
+    };
+    VirtualScrollComponent.prototype.ngAfterViewChecked = function () {
+        if (this.doScrollBottom) {
+            this.scrollElement.scrollTop = this.scrollElement.scrollHeight;
+            this.doScrollBottom = false;
+        }
     };
     VirtualScrollComponent.prototype.refresh = function () {
         var _this = this;
         requestAnimationFrame(function () { return _this.calculateItems(); });
     };
     VirtualScrollComponent.prototype.scrollInto = function (item) {
-        var el = this.parentScroll instanceof Window ? document.body : this.parentScroll || this.element.nativeElement;
         var offsetTop = this.getElementsOffset();
         var index = (this.items || []).indexOf(item);
         if (index < 0 || index >= (this.items || []).length)
             return;
         var d = this.calculateDimensions();
-        el.scrollTop = (Math.floor(index / d.itemsPerRow) * d.childHeight)
+        this.scrollElement.scrollTop = (Math.floor(index / d.itemsPerRow) * d.childHeight)
             - (d.childHeight * Math.min(index, this.bufferAmount));
         this.refresh();
     };
@@ -104,11 +123,10 @@ var VirtualScrollComponent = (function () {
         return offsetTop;
     };
     VirtualScrollComponent.prototype.calculateDimensions = function () {
-        var el = this.parentScroll instanceof Window ? document.body : this.parentScroll || this.element.nativeElement;
         var items = this.items || [];
         var itemCount = items.length;
-        var viewWidth = el.clientWidth - this.scrollbarWidth;
-        var viewHeight = el.clientHeight - this.scrollbarHeight;
+        var viewWidth = this.scrollElement.clientWidth - this.scrollbarWidth;
+        var viewHeight = this.scrollElement.clientHeight - this.scrollbarHeight;
         var contentDimensions;
         if (this.childWidth == undefined || this.childHeight == undefined) {
             var content = this.contentElementRef.nativeElement;
@@ -127,7 +145,7 @@ var VirtualScrollComponent = (function () {
         var itemsPerCol = Math.max(1, Math.floor(viewHeight / childHeight));
         var elScrollTop = this.parentScroll instanceof Window
             ? (window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0)
-            : el.scrollTop;
+            : this.scrollElement.scrollTop;
         var scrollTop = Math.max(0, elScrollTop);
         if (itemsPerCol === 1 && Math.floor(scrollTop / this.scrollHeight * itemCount) + itemsPerRowByCalc >= itemCount) {
             itemsPerRow = itemsPerRowByCalc;
@@ -144,13 +162,12 @@ var VirtualScrollComponent = (function () {
         };
     };
     VirtualScrollComponent.prototype.calculateItems = function () {
-        var el = this.parentScroll instanceof Window ? document.body : this.parentScroll || this.element.nativeElement;
         var d = this.calculateDimensions();
         var items = this.items || [];
         var offsetTop = this.getElementsOffset();
         var elScrollTop = this.parentScroll instanceof Window
             ? (window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0)
-            : el.scrollTop;
+            : this.scrollElement.scrollTop;
         this.scrollHeight = d.childHeight * d.itemCount / d.itemsPerRow;
         if (elScrollTop > this.scrollHeight) {
             elScrollTop = this.scrollHeight + offsetTop;
@@ -166,7 +183,6 @@ var VirtualScrollComponent = (function () {
         var maxStart = Math.max(0, maxStartEnd - d.itemsPerCol * d.itemsPerRow - d.itemsPerRow);
         var start = Math.min(maxStart, Math.floor(indexByScrollTop) * d.itemsPerRow);
         this.topPadding = d.childHeight * Math.ceil(start / d.itemsPerRow) - (d.childHeight * Math.min(start, this.bufferAmount));
-        ;
         start = !isNaN(start) ? start : -1;
         end = !isNaN(end) ? end : -1;
         start -= this.bufferAmount;
@@ -221,6 +237,7 @@ var VirtualScrollComponent = (function () {
         'childWidth': [{ type: core_1.Input },],
         'childHeight': [{ type: core_1.Input },],
         'bufferAmount': [{ type: core_1.Input },],
+        'autoScroll': [{ type: core_1.Input },],
         'parentScroll': [{ type: core_1.Input },],
         'update': [{ type: core_1.Output },],
         'change': [{ type: core_1.Output },],
